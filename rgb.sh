@@ -37,32 +37,49 @@ ensure_openrgb_server() {
 
 ensure_openrgb_server || exit 1
 
+# Peak R/G/B per channel (temperature scale). Default 40; optional arg or env MAX_CH in 0..255.
+MAX_CH="${MAX_CH:-40}"
+if [[ -n "${1:-}" ]]; then
+    if [[ "$1" =~ ^[0-9]+$ ]] && ((10#$1 <= 255)); then
+        MAX_CH="$1"
+    else
+        echo "Usage: $0 [max_channel]" >&2
+        echo "  max_channel — peak R/G/B for temp mapping, integer 0-255 (default: 40, or set MAX_CH)" >&2
+        exit 1
+    fi
+fi
+
 get_temp() {
     sensors 2>/dev/null | grep -i 'Tctl' | head -1 | awk '{print $2}' | tr -d '+°C'
 }
 
 get_rgb() {
-    t=$1
+    local t=$1
+    local m=$MAX_CH
 
     if (( $(echo "$t <= 30" | bc -l) )); then
-        R=0; G=40; B=0
+        R=0
+        G=$m
+        B=0
 
     elif (( $(echo "$t <= 45" | bc -l) )); then
         # Green → Blue
         ratio=$(echo "($t-30)/15" | bc -l)
         R=0
-        G=$(printf "%.0f" $(echo "40*(1-$ratio)" | bc -l))
-        B=$(printf "%.0f" $(echo "40*$ratio" | bc -l))
+        G=$(printf "%.0f" $(echo "$m*(1-$ratio)" | bc -l))
+        B=$(printf "%.0f" $(echo "$m*$ratio" | bc -l))
 
     elif (( $(echo "$t <= 70" | bc -l) )); then
         # Blue → Red
         ratio=$(echo "($t-45)/25" | bc -l)
-        R=$(printf "%.0f" $(echo "40*$ratio" | bc -l))
+        R=$(printf "%.0f" $(echo "$m*$ratio" | bc -l))
         G=0
-        B=$(printf "%.0f" $(echo "40*(1-$ratio)" | bc -l))
+        B=$(printf "%.0f" $(echo "$m*(1-$ratio)" | bc -l))
 
     else
-        R=40; G=0; B=0
+        R=$m
+        G=0
+        B=0
     fi
 
     echo "$R $G $B"

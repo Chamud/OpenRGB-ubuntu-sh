@@ -77,17 +77,25 @@ You can install either a **system** service (runs as a specific user at boot) or
 
    [Service]
    Type=simple
-   User=YOUR_LINUX_USERNAME
-   Group=YOUR_LINUX_USERNAME
-   ExecStart=/bin/bash /home/YOUR_LINUX_USERNAME/Programs/OpenRGB/rgb.sh
+   User=chamd
+   Group=chamd
+   ExecStart=/bin/bash /home/chamd/Programs/OpenRGB/rgb.sh
    Restart=on-failure
    RestartSec=5
    Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/bin
    # Optional: listen only on localhost instead of 0.0.0.0
    # Environment=SDK_HOST=127.0.0.1
+   # Optional: peak R/G/B for temp colors (0–255; default in script is 40)
+   # Environment=MAX_CH=200
 
    [Install]
    WantedBy=multi-user.target
+   ```
+
+   To pass brightness as an **argument** instead (overrides `MAX_CH` if both are set):
+
+   ```ini
+   ExecStart=/bin/bash /home/chamd/Programs/OpenRGB/rgb.sh 200
    ```
 
 3. **Reload systemd, enable, and start:**
@@ -110,6 +118,14 @@ You can install either a **system** service (runs as a specific user at boot) or
    ```bash
    sudo systemctl stop openrgb-temp-rgb.service
    sudo systemctl disable openrgb-temp-rgb.service
+   ```
+
+6. **Change `MAX_CH`, `ExecStart`, or other unit options later:** edit the unit file, then reload and restart so systemd picks up the changes:
+
+   ```bash
+   sudo nano /etc/systemd/system/openrgb-temp-rgb.service
+   sudo systemctl daemon-reload
+   sudo systemctl restart openrgb-temp-rgb.service
    ```
 
 **Graphical / OpenRGB note:** At boot, OpenRGB may still need a **display** or working Qt platform for your install. If the service fails only before you log in graphically, try **Option B** (user service after graphical session) or start the service **after** `graphical.target` (advanced; depends on your desktop).
@@ -139,9 +155,16 @@ You can install either a **system** service (runs as a specific user at boot) or
    RestartSec=5
    Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/bin
    # Environment=SDK_HOST=127.0.0.1
+   # Environment=MAX_CH=200
 
    [Install]
    WantedBy=default.target
+   ```
+
+   Or pass brightness as the first argument (wins over `MAX_CH`):
+
+   ```ini
+   ExecStart=%h/Programs/OpenRGB/rgb.sh 200
    ```
 
 2. **Reload, enable, and start for your user session:**
@@ -167,12 +190,43 @@ You can install either a **system** service (runs as a specific user at boot) or
 
    Reboot and confirm with `systemctl --user status` (may still require a graphical session for OpenRGB depending on your setup).
 
+5. **After editing the user unit** (e.g. `MAX_CH` or `ExecStart`):
+
+   ```bash
+   nano ~/.config/systemd/user/openrgb-temp-rgb.service
+   systemctl --user daemon-reload
+   systemctl --user restart openrgb-temp-rgb.service
+   ```
+
+---
+
+## Brightness (`MAX_CH`) and systemd
+
+`rgb.sh` maps CPU temperature to RGB using a **peak channel value** (default **40**). You can set it to **0–255** in either of these ways:
+
+| Method | Example |
+|--------|---------|
+| **Environment** (no positional arg) | `Environment=MAX_CH=200` in the unit’s `[Service]` section |
+| **First argument** to the script | `ExecStart=.../rgb.sh 200` |
+
+If you use **both**, the **positional argument overrides** `MAX_CH`.
+
+You can combine variables on one line:
+
+```ini
+Environment="PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/bin" "MAX_CH=200"
+```
+
+**Apply any unit-file change:** `daemon-reload` then `restart` (see step 6 under Option A, or step 5 under Option B).
+
 ---
 
 ## Manual test (foreground)
 
 ```bash
 /path/to/OpenRGB/rgb.sh
+/path/to/OpenRGB/rgb.sh 200          # peak channel 200 (0–255)
+MAX_CH=128 /path/to/OpenRGB/rgb.sh   # same via env
 ```
 
 Stop with `Ctrl+C`. If port 6742 was free, stopping the script stops the OpenRGB server process **this script started**; an already-running OpenRGB is left alone.
@@ -185,11 +239,13 @@ Stop with `Ctrl+C`. If port 6742 was free, stopping the script stops the OpenRGB
 |-----------|-------------|----------------------------------|
 | `SDK_HOST` | `0.0.0.0` | SDK bind address                 |
 | `SDK_PORT` | `6742`    | SDK TCP port                     |
+| `MAX_CH`   | `40`      | Peak R/G/B for temp mapping (0–255); ignored if you pass a numeric first argument to `rgb.sh` |
 
 Example:
 
 ```bash
 SDK_HOST=127.0.0.1 /path/to/OpenRGB/rgb.sh
+MAX_CH=200 /path/to/OpenRGB/rgb.sh
 ```
 
 ---
